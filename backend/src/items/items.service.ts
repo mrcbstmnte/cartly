@@ -3,6 +3,7 @@ import {
   CollectionReference,
   FieldValue,
   Firestore,
+  GrpcStatus,
 } from 'firebase-admin/firestore';
 import { FIRESTORE } from '../firebase/firestore.provider';
 import { CreateItemDto } from './dto/create-item.dto';
@@ -59,7 +60,19 @@ export class ItemsService {
       throw new NotFoundException(`Item ${id} not found`);
     }
 
-    await ref.update({ bought, updatedAt: FieldValue.serverTimestamp() });
+    try {
+      await ref.update({ bought, updatedAt: FieldValue.serverTimestamp() });
+    } catch (error) {
+      // TOCTOU: the item existed at the check above but may have been
+      // deleted before this update reached Firestore. Unlike delete(),
+      // update() is not idempotent on a missing document — it throws
+      // NOT_FOUND — so without this catch, that race would surface as an
+      // unhandled 500 instead of the same 404 the existence check gives.
+      if (isNotFoundError(error)) {
+        throw new NotFoundException(`Item ${id} not found`);
+      }
+      throw error;
+    }
 
     const updated = await ref.get();
     return toItemDto(updated);
@@ -79,4 +92,16 @@ export class ItemsService {
     await ref.delete();
     return { id };
   }
+}
+
+// Matches on the Firestore gRPC error code (5 / NOT_FOUND), not the message,
+// so unrelated failures are never mistaken for the race above and
+// propagate untouched.
+function isNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: number }).code === GrpcStatus.NOT_FOUND
+  );
 }
