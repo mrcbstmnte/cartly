@@ -78,6 +78,31 @@ export class ItemsService {
     return toItemDto(updated);
   }
 
+  // Firestore has no server-side delete-by-query, so this is one query plus
+  // one batched write. That is the point of US-5: a single commit instead of
+  // N sequential round trips.
+  async clearBought(userId: string): Promise<{ deleted: number }> {
+    const ref = this.itemsRef(userId);
+    const snapshot = await ref.where('bought', '==', true).get();
+
+    if (snapshot.empty) {
+      return { deleted: 0 };
+    }
+
+    // A Firestore batch caps at 500 writes. A shopping list will not reach
+    // that, but chunking costs three lines and removes the cliff.
+    const BATCH_LIMIT = 450;
+    for (let i = 0; i < snapshot.docs.length; i += BATCH_LIMIT) {
+      const batch = this.db.batch();
+      for (const doc of snapshot.docs.slice(i, i + BATCH_LIMIT)) {
+        batch.delete(doc.ref);
+      }
+      await batch.commit();
+    }
+
+    return { deleted: snapshot.size };
+  }
+
   async remove(userId: string, id: string): Promise<{ id: string }> {
     const ref = this.itemsRef(userId).doc(id);
     const existing = await ref.get();

@@ -39,9 +39,13 @@ export class ItemsController {
     return this.items.setBought(userId, id, dto.bought);
   }
 
-  // Task 7 adds @Delete('bought') above this route — it must come before
-  // @Delete(':id'), since Nest matches routes in declaration order and
-  // ':id' would otherwise capture the literal 'bought' first.
+  // Declared before DELETE /items/:id on purpose: Nest matches in declaration
+  // order, so the reverse would route this into the by-id handler.
+  @Delete('bought')
+  clearBought(@UserId() userId: string): Promise<{ deleted: number }> {
+    return this.items.clearBought(userId);
+  }
+
   @Delete(':id')
   remove(
     @UserId() userId: string,
