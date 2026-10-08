@@ -91,6 +91,7 @@ void main() {
     expect(find.text('milk'), findsOneWidget);
     expect(find.text('bread'), findsOneWidget);
     expect(find.text('Qty 2'), findsOneWidget);
+    expect(find.text('Qty 1'), findsOneWidget);
 
     final checkboxes =
         tester.widgetList<Checkbox>(find.byType(Checkbox)).toList();
@@ -104,7 +105,13 @@ void main() {
     await tester.pumpWidget(
       _app(
         FakeItemsRepository(
-          items: [_item('unbought'), _item('bought-one', bought: true)],
+          // Bought-first is an order the real backend would never return
+          // (US-1 has the database sort unbought-first), but that's what
+          // makes this fixture able to catch a regression: a buggy
+          // sort-by-bought-status would flip this to unbought-first, while
+          // leaving an already-unbought-first fixture unchanged and the
+          // test wrongly green.
+          items: [_item('bought-one', bought: true), _item('unbought')],
         ),
       ),
     );
@@ -117,6 +124,6 @@ void main() {
         .toList();
 
     // The app must not re-sort; it shows what the API gave it (US-1).
-    expect(names, ['unbought', 'bought-one']);
+    expect(names, ['bought-one', 'unbought']);
   });
 }
