@@ -95,8 +95,24 @@ describe('PATCH /items/:id (US-3, US-6)', () => {
       .send({ bought: true });
 
     // Same 404 as a nonexistent item: user-b learns nothing, not even
-    // that the item exists.
+    // that the item exists. Assert the message came from the handler's
+    // NotFoundException, not a router-level 404 (which would mean the
+    // route itself is unreachable, not that ownership was checked).
     expect(response.status).toBe(404);
+    expect(response.body.message).toContain('not found');
+
+    // Indistinguishability, asserted directly: a genuinely nonexistent
+    // item produces the same status and a message that differs only by
+    // the item ID.
+    const genuinelyMissing = await request(app.getHttpServer())
+      .patch('/items/does-not-exist')
+      .set('x-user-id', 'user-b')
+      .send({ bought: true });
+
+    expect(genuinelyMissing.status).toBe(response.status);
+    expect(
+      (genuinelyMissing.body.message as string).replace('does-not-exist', id),
+    ).toBe(response.body.message);
 
     const stillUnbought = await request(app.getHttpServer())
       .get('/items')
