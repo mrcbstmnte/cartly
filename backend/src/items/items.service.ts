@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
   CollectionReference,
   FieldValue,
@@ -43,5 +43,25 @@ export class ItemsService {
 
     const snapshot = await ref.get();
     return toItemDto(snapshot);
+  }
+
+  async setBought(
+    userId: string,
+    id: string,
+    bought: boolean,
+  ): Promise<ItemDto> {
+    const ref = this.itemsRef(userId).doc(id);
+    const existing = await ref.get();
+
+    // Because userId is in the path, this is also the ownership check:
+    // another user's item simply is not here.
+    if (!existing.exists) {
+      throw new NotFoundException(`Item ${id} not found`);
+    }
+
+    await ref.update({ bought, updatedAt: FieldValue.serverTimestamp() });
+
+    const updated = await ref.get();
+    return toItemDto(updated);
   }
 }
