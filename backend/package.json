@@ -20,7 +20,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "firebase emulators:exec --config ../firebase.json --only firestore --project cartly-dev \"cross-env FIREBASE_PROJECT_ID=cartly-dev METADATA_SERVER_DETECTION=none jest --config ./test/jest-e2e.json --runInBand\""
+    "test:e2e": "firebase emulators:exec --config ../firebase.json --only firestore --project cartly-dev \"cross-env FIREBASE_PROJECT_ID=cartly-dev METADATA_SERVER_DETECTION=none jest --config ./test/jest-e2e.json --runInBand\"",
+    "test:e2e:only": "firebase emulators:exec --config ../firebase.json --only firestore --project cartly-dev \"cross-env FIREBASE_PROJECT_ID=cartly-dev METADATA_SERVER_DETECTION=none jest --config ./test/jest-e2e.json --runInBand --testPathPatterns $SPEC\""
   },
   "dependencies": {
     "@google-cloud/firestore": "^9.3.1",
