@@ -1,5 +1,6 @@
-import { Controller, Get } from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import { UserId } from '../common/decorators/user-id.decorator';
+import { CreateItemDto } from './dto/create-item.dto';
 import { ItemDto } from './dto/item.dto';
 import { ItemsService } from './items.service';
 
@@ -10,5 +11,13 @@ export class ItemsController {
   @Get()
   list(@UserId() userId: string): Promise<ItemDto[]> {
     return this.items.list(userId);
+  }
+
+  @Post()
+  create(
+    @UserId() userId: string,
+    @Body() dto: CreateItemDto,
+  ): Promise<ItemDto> {
+    return this.items.create(userId, dto);
   }
 }

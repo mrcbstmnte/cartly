@@ -1,6 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { CollectionReference, Firestore } from 'firebase-admin/firestore';
+import {
+  CollectionReference,
+  FieldValue,
+  Firestore,
+} from 'firebase-admin/firestore';
 import { FIRESTORE } from '../firebase/firestore.provider';
+import { CreateItemDto } from './dto/create-item.dto';
 import { ItemDto } from './dto/item.dto';
 import { toItemDto } from './item.mapper';
 
@@ -21,5 +26,22 @@ export class ItemsService {
       .get();
 
     return snapshot.docs.map(toItemDto);
+  }
+
+  async create(userId: string, dto: CreateItemDto): Promise<ItemDto> {
+    const now = FieldValue.serverTimestamp();
+
+    // bought is set here, not taken from the client: a new item always
+    // starts unbought (US-2).
+    const ref = await this.itemsRef(userId).add({
+      name: dto.name,
+      quantity: dto.quantity,
+      bought: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const snapshot = await ref.get();
+    return toItemDto(snapshot);
   }
 }
