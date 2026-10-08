@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { CollectionReference, Firestore } from 'firebase-admin/firestore';
 import { FIRESTORE } from '../firebase/firestore.provider';
+import { ItemDto } from './dto/item.dto';
+import { toItemDto } from './item.mapper';
 
 @Injectable()
 export class ItemsService {
@@ -12,7 +14,12 @@ export class ItemsService {
     return this.db.collection('users').doc(userId).collection('items');
   }
 
-  async list(_userId: string): Promise<unknown[]> {
-    return Promise.resolve([]);
+  async list(userId: string): Promise<ItemDto[]> {
+    const snapshot = await this.itemsRef(userId)
+      .orderBy('bought', 'asc')
+      .orderBy('createdAt', 'desc')
+      .get();
+
+    return snapshot.docs.map(toItemDto);
   }
 }
