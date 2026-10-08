@@ -16,13 +16,33 @@ void main() {
       config: _config,
       client: MockClient((request) async {
         seenHeaders.add(request.headers);
-        return http.Response('[]', 200);
+        switch (request.method) {
+          case 'GET':
+            return http.Response('[]', 200);
+          case 'POST':
+          case 'PATCH':
+            return http.Response(jsonEncode({'id': 'a'}), 200);
+          case 'DELETE':
+            if (request.url.toString().endsWith('/items/bought')) {
+              return http.Response(jsonEncode({'deleted': 0}), 200);
+            }
+            return http.Response('', 200);
+          default:
+            throw StateError('unexpected method ${request.method}');
+        }
       }),
     );
 
     await client.fetchItems();
+    await client.createItem(name: 'milk', quantity: 1);
+    await client.setBought('a', bought: true);
+    await client.deleteItem('a');
+    await client.clearBought();
 
-    expect(seenHeaders.single['x-user-id'], 'user-a');
+    expect(seenHeaders, hasLength(5));
+    for (final headers in seenHeaders) {
+      expect(headers['x-user-id'], 'user-a');
+    }
   });
 
   test('fetchItems returns the decoded list', () async {
@@ -54,10 +74,14 @@ void main() {
   });
 
   test('createItem posts name and quantity as JSON', () async {
+    String? method;
+    String? url;
     Map<String, dynamic>? sentBody;
     final client = CartlyApiClient(
       config: _config,
       client: MockClient((request) async {
+        method = request.method;
+        url = request.url.toString();
         sentBody = jsonDecode(request.body) as Map<String, dynamic>;
         return http.Response(jsonEncode({'id': 'a'}), 201);
       }),
@@ -65,6 +89,8 @@ void main() {
 
     await client.createItem(name: 'milk', quantity: 3);
 
+    expect(method, 'POST');
+    expect(url, 'http://api.test/items');
     expect(sentBody, {'name': 'milk', 'quantity': 3});
   });
 
