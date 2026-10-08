@@ -64,4 +64,19 @@ export class ItemsService {
     const updated = await ref.get();
     return toItemDto(updated);
   }
+
+  async remove(userId: string, id: string): Promise<{ id: string }> {
+    const ref = this.itemsRef(userId).doc(id);
+    const existing = await ref.get();
+
+    // Firestore deletes are idempotent and succeed on a missing document,
+    // so the existence check is what turns a no-op into the clear error
+    // US-4 asks for.
+    if (!existing.exists) {
+      throw new NotFoundException(`Item ${id} not found`);
+    }
+
+    await ref.delete();
+    return { id };
+  }
 }
