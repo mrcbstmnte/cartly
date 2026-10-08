@@ -106,6 +106,7 @@ void main() {
 
     await container.read(itemsProvider.notifier).deleteItem('a');
 
+    expect(repository.calls, ['fetchItems', 'deleteItem:a', 'fetchItems']);
     expect(
       container.read(itemsProvider).requireValue.map((item) => item.id),
       ['b'],
@@ -123,6 +124,7 @@ void main() {
         await container.read(itemsProvider.notifier).clearBought();
 
     expect(deleted, 2);
+    expect(repository.calls, ['fetchItems', 'clearBought', 'fetchItems']);
     expect(
       container.read(itemsProvider).requireValue.map((item) => item.id),
       ['b'],

@@ -4,17 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('only the api client imports package:http', () {
+    const allowed = 'lib/data/api/cartly_api_client.dart';
     final offenders = <String>[];
 
-    for (final path in ['lib/ui', 'lib/state', 'lib/data/models']) {
-      final directory = Directory(path);
-      if (!directory.existsSync()) continue;
-
-      for (final entity in directory.listSync(recursive: true)) {
-        if (entity is! File || !entity.path.endsWith('.dart')) continue;
-        if (entity.readAsStringSync().contains('package:http/')) {
-          offenders.add(entity.path);
-        }
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      if (entity.path.endsWith(allowed)) continue;
+      if (entity.readAsStringSync().contains('package:http/')) {
+        offenders.add(entity.path);
       }
     }
 
