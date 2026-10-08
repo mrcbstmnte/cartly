@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Secrets
+.env
+.env.local
+service-account.json
+*-service-account.json
+
+# Node
+node_modules/
+dist/
+
+# Flutter / Dart
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Firebase emulator
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
