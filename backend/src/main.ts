@@ -1,3 +1,6 @@
+// Must stay the first import: it loads backend/.env into process.env before the
+// Firestore provider factory reads FIREBASE_PROJECT_ID at module load.
+import 'dotenv/config';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
