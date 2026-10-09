@@ -91,7 +91,30 @@ Test counts from the last run: backend 39 passing in 7 suites; app 33 passing; `
 | US-5 Clear bought items | Done | One query plus one batched commit (chunked at 450); returns `{"deleted": n}`, and 0 is not an error |
 | US-6 Only see my own items | Done | Global guard (401 without `x-user-id`) plus path-scoped documents; another user's ID gives 404 |
 
-Not verified here: the Flutter UI rendering in a real browser was checked separately from this table's test and curl evidence.
+### What backs each "Done" above
+
+Every row is backed by automated tests plus a `curl` walkthrough of that story
+against a live API and a live Firestore emulator. The app additionally compiles for
+its real target (`flutter build web --release` succeeds).
+
+One honest gap: the app's **visual** rendering has not been verified by eye in a
+browser. Widget tests prove a widget is present in the tree, which is not the same
+as proving a user can see it — and this project already hit that distinction once.
+The add-item sheet is a modal bottom sheet, so it covers the area where a SnackBar
+appears; a rejection reason shown only in a SnackBar would have been invisible
+behind the open sheet while still satisfying a widget test. The sheet therefore
+displays the backend's message inline (keyed `server-error`) and stays open so the
+input can be corrected. That reasoning is sound and the behaviour is covered by
+`app/test/ui/item_actions_test.dart`, but a human has not yet looked at the screen
+to confirm it reads well. To check it in about a minute:
+
+```bash
+# with the emulator and API running (see Setup above)
+cd app && flutter run -d chrome --dart-define=CARTLY_USER_ID=demo-user
+# then: tap +, enter a name longer than 100 characters, tap Add.
+# The client-side validator allows it through; the backend rejects it with
+# @MaxLength(100), and the reason should be readable inside the sheet.
+```
 
 ## What is not included
 
