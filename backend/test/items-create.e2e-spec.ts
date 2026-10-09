@@ -58,6 +58,11 @@ describe('POST /items (US-2)', () => {
   it.each([
     ['an empty name', { name: '', quantity: 1 }, 'name'],
     ['a whitespace-only name', { name: '   ', quantity: 1 }, 'name'],
+    [
+      'a name of 101 characters',
+      { name: 'a'.repeat(101), quantity: 1 },
+      'name',
+    ],
     ['a missing name', { quantity: 1 }, 'name'],
     ['quantity below 1', { name: 'milk', quantity: 0 }, 'quantity'],
     ['a negative quantity', { name: 'milk', quantity: -3 }, 'quantity'],

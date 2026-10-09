@@ -8,11 +8,16 @@ class FakeItemsRepository implements ItemsRepository {
   FakeItemsRepository({
     List<Item> items = const [],
     this.failWith,
+    this.failMutationsWith,
     this.fetchDelay,
   }) : _items = [...items];
 
   List<Item> _items;
   final ApiException? failWith;
+
+  /// Thrown by every mutation while `fetchItems` still succeeds, so a test can
+  /// express "the list loaded, then a mutation failed".
+  final ApiException? failMutationsWith;
   final Duration? fetchDelay;
 
   final List<String> calls = <String>[];
@@ -34,6 +39,7 @@ class FakeItemsRepository implements ItemsRepository {
   }) async {
     calls.add('createItem:$name:$quantity');
     if (failWith != null) throw failWith!;
+    if (failMutationsWith != null) throw failMutationsWith!;
     final item = Item(
       id: 'generated-${_items.length}',
       name: name,
@@ -49,6 +55,7 @@ class FakeItemsRepository implements ItemsRepository {
   Future<Item> setBought(String id, {required bool bought}) async {
     calls.add('setBought:$id:$bought');
     if (failWith != null) throw failWith!;
+    if (failMutationsWith != null) throw failMutationsWith!;
     final existing = _items.firstWhere((item) => item.id == id);
     final updated = Item(
       id: existing.id,
@@ -67,6 +74,7 @@ class FakeItemsRepository implements ItemsRepository {
   Future<void> deleteItem(String id) async {
     calls.add('deleteItem:$id');
     if (failWith != null) throw failWith!;
+    if (failMutationsWith != null) throw failMutationsWith!;
     _items = _items.where((item) => item.id != id).toList();
   }
 
@@ -74,6 +82,7 @@ class FakeItemsRepository implements ItemsRepository {
   Future<int> clearBought() async {
     calls.add('clearBought');
     if (failWith != null) throw failWith!;
+    if (failMutationsWith != null) throw failMutationsWith!;
     final before = _items.length;
     _items = _items.where((item) => !item.bought).toList();
     return before - _items.length;

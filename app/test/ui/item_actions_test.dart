@@ -89,6 +89,28 @@ void main() {
     ]);
   });
 
+  testWidgets('a failed mutation keeps the loaded list (US-3)', (tester) async {
+    final repository = FakeItemsRepository(
+      items: [_item('milk'), _item('bread')],
+      failMutationsWith: const ApiException('item not found', statusCode: 404),
+    );
+    await tester.pumpWidget(_app(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.text('item not found'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('milk'), findsOneWidget);
+    expect(find.text('bread'), findsOneWidget);
+  });
+
   testWidgets('deletes an item (US-4)', (tester) async {
     final repository = FakeItemsRepository(items: [_item('milk')]);
     await tester.pumpWidget(_app(repository));
