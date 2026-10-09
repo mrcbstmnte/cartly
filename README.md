@@ -21,7 +21,35 @@ export PATH="/opt/homebrew/opt/node@20/bin:/opt/homebrew/opt/openjdk@21/bin:$PAT
 
 (Drop the `node@20` part if Node 20+ is already your default. The commands below assume this PATH in the backend terminals.)
 
+## Quick start
+
+```bash
+(cd backend && npm install) && (cd app && flutter pub get)   # first time only
+bin/dev
+```
+
+`bin/dev` starts the Firestore emulator, waits for it, starts the API, waits for
+it to actually answer, then runs the app in Chrome in the foreground so you keep
+hot reload (`r`), hot restart (`R`) and quit (`q`). Quitting or Ctrl-C shuts the
+emulator and API down with it. It creates `backend/.env` from the example on the
+first run and never overwrites an existing one.
+
+| Command | Does |
+|---|---|
+| `bin/dev` | Start everything |
+| `bin/dev --check` | Verify node, Java, Flutter and the ports without starting anything |
+| `bin/dev --stop` | Force-stop anything left on ports 8080 and 3000 |
+| `CARTLY_USER_ID=someone-else bin/dev` | Run as a different user, to see US-6's isolation |
+
+Logs go to `/tmp/cartly-emulator.log` and `/tmp/cartly-api.log`.
+
+If the terminal is closed rather than quit, the shutdown hook does not run — use
+`bin/dev --stop`.
+
 ## Run it locally with the Firestore emulator
+
+The three steps `bin/dev` automates, if you would rather run them yourself:
+
 
 ```bash
 git clone <this repo> cartly && cd cartly

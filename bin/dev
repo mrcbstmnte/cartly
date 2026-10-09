@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+#
+# bin/dev — start the whole Cartly dev stack with one command.
+#
+#   Firestore emulator (:8080)  ->  NestJS API (:3000)  ->  Flutter app in Chrome
+#
+# The app runs in the foreground so you keep hot reload (r), hot restart (R)
+# and quit (q). Quitting — or Ctrl-C — shuts the emulator and API down too.
+#
+# Override the user ID the app sends in its x-user-id header:
+#   CARTLY_USER_ID=someone-else bin/dev
+#
+# Check your machine has what it needs without starting anything:
+#   bin/dev --check
+#
+# Force-stop anything left on the dev ports (if the shutdown trap was bypassed):
+#   bin/dev --stop
+
+set -euo pipefail
+
+# Deliberately NOT using `set -m`. Monitor mode would put each background job in
+# its own process group, but that does not help: the firebase CLI and nest both
+# re-parent their real workers into groups of their own regardless, so cleanup
+# walks the descendant tree instead (see stop_tree). Worse, in a non-interactive
+# shell monitor mode suppresses the INT trap, so Ctrl-C killed this script
+# outright and left the emulator and API holding their ports.
+
+readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+readonly EMULATOR_LOG=/tmp/cartly-emulator.log
+readonly API_LOG=/tmp/cartly-api.log
+readonly USER_ID="${CARTLY_USER_ID:-demo-user}"
+
+EMULATOR_PID=""
+API_PID=""
+CHECK_ONLY=false
+
+case "${1:-}" in
+  --check) CHECK_ONLY=true ;;
+  --stop)
+    # Escape hatch for when the shutdown trap did not fire — for example if the
+    # terminal was closed rather than quitting with q or Ctrl-C.
+    stopped=0
+    for port in 8080 3000; do
+      for pid in $(lsof -ti:"$port" 2>/dev/null); do
+        kill -9 "$pid" 2>/dev/null && stopped=$((stopped + 1))
+      done
+    done
+    printf 'bin/dev: stopped %d process(es) on ports 8080 and 3000\n' "$stopped"
+    exit 0
+    ;;
+  -h|--help) sed -n '3,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  '') ;;
+  *) printf 'bin/dev: unknown option %s (try --help)\n' "$1" >&2; exit 2 ;;
+esac
+
+die() { printf '\nbin/dev: %s\n' "$1" >&2; exit 1; }
+step() { printf '  %-10s %s\n' "$1" "$2"; }
+
+# Every descendant of a pid, deepest first. Process groups are NOT enough here:
+# the firebase CLI spawns its Firestore java child as its own group leader, and
+# `nest start --watch` runs the compiled app in another group, so a `kill -- -PGID`
+# on the job leaves both running and the ports held.
+descendants() {
+  local child
+  for child in $(pgrep -P "$1" 2>/dev/null); do
+    descendants "$child"
+    printf '%s\n' "$child"
+  done
+}
+
+# Stop a process and everything below it, escalating only as needed. INT first
+# because the firebase CLI traps it and shuts its java child down cleanly.
+stop_tree() {
+  local root="$1" sig pid alive
+  [ -n "$root" ] || return 0
+  for sig in INT TERM KILL; do
+    alive=false
+    # Re-derive each round: a graceful stop can spawn short-lived children.
+    for pid in $(descendants "$root") "$root"; do
+      if kill -0 "$pid" 2>/dev/null; then
+        alive=true
+        kill -"$sig" "$pid" 2>/dev/null || true
+      fi
+    done
+    [ "$alive" = true ] || return 0
+    sleep 2
+  done
+}
+
+# Last resort. Safe because the preflight proved both ports were free, so
+# anything listening on them now was started by this script.
+release_port() {
+  local pid
+  for pid in $(lsof -ti:"$1" 2>/dev/null); do
+    kill -9 "$pid" 2>/dev/null || true
+  done
+}
+
+cleanup() {
+  local code=$?
+  # Only announce a shutdown if something was actually started; a preflight
+  # failure should not claim to be stopping services that never ran.
+  [ -n "$EMULATOR_PID$API_PID" ] || exit "$code"
+  printf '\nshutting down\n'
+  stop_tree "$API_PID"
+  stop_tree "$EMULATOR_PID"
+  release_port 3000
+  release_port 8080
+  wait 2>/dev/null || true
+  exit "$code"
+}
+trap cleanup EXIT INT TERM
+
+# --- toolchain -------------------------------------------------------------
+# Homebrew installs node@20 and openjdk@21 keg-only, meaning they are NOT on
+# PATH by default. Prepend them when present rather than hardcoding them, so
+# this script also works on a machine where they are already the defaults.
+# Java first: it is almost never on PATH when installed keg-only.
+[ -d /opt/homebrew/opt/openjdk@21/bin ] && PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
+
+# Node only if needed. Reaching for the keg unconditionally would override a
+# perfectly good newer default (say Node 22) with 20, which is rude and not
+# what anyone asked for.
+node_major() { node -v 2>/dev/null | sed 's/^v\([0-9]*\).*/\1/'; }
+if ! command -v node >/dev/null || [ "$(node_major)" -lt 20 ] 2>/dev/null; then
+  [ -d /opt/homebrew/opt/node@20/bin ] && PATH="/opt/homebrew/opt/node@20/bin:$PATH"
+fi
+export PATH
+
+command -v node >/dev/null || die "node not found. Install Node 20 or newer."
+[ "$(node_major)" -ge 20 ] || die "node $(node -v) is too old; NestJS needs 20 or newer."
+
+command -v flutter >/dev/null || die "flutter not found. See https://flutter.dev/setup"
+
+# The Firestore emulator is a Java program, and without a JDK it fails with an
+# error that never mentions Java. Note this RUNS java rather than just looking
+# for it: macOS ships a stub at /usr/bin/java that exists and is executable but
+# errors with "Unable to locate a Java Runtime", so `command -v java` passes on
+# a machine with no JDK at all.
+java -version >/dev/null 2>&1 || die "no working Java runtime — the Firestore emulator needs a JDK.
+  brew install openjdk@21
+Do NOT use 'brew install --cask temurin@21': it runs a .pkg under sudo, needs an
+interactive password, and brew exits 0 even when the install failed.
+(A bare /usr/bin/java on macOS is a stub, not a JDK.)"
+
+# --- ports -----------------------------------------------------------------
+for port in 8080 3000; do
+  if lsof -ti:"$port" >/dev/null 2>&1; then
+    die "port $port is already in use (pid $(lsof -ti:"$port" | tr '\n' ' ')).
+Stop whatever is holding it, or you will get confusing Firestore errors."
+  fi
+done
+
+if [ "$CHECK_ONLY" = true ]; then
+  step node "$(node -v)"
+  step java "$(java -version 2>&1 | head -1)"
+  step flutter "$(flutter --version 2>/dev/null | head -1)"
+  step ports "8080 and 3000 are free"
+  printf '\nready. run bin/dev to start the stack.\n'
+  trap - EXIT   # nothing was started, so skip the shutdown message
+  exit 0
+fi
+
+# --- config and dependencies ----------------------------------------------
+if [ ! -f "$ROOT/backend/.env" ]; then
+  cp "$ROOT/backend/.env.example" "$ROOT/backend/.env"
+  step config "created backend/.env from the example"
+else
+  # Never overwrite: this may point at a real Firebase project.
+  step config "using existing backend/.env"
+fi
+
+[ -d "$ROOT/backend/node_modules" ] || { step deps "installing backend packages"; (cd "$ROOT/backend" && npm install --silent); }
+[ -d "$ROOT/app/.dart_tool" ]      || { step deps "fetching Dart packages";      (cd "$ROOT/app" && flutter pub get); }
+
+# --- emulator --------------------------------------------------------------
+(cd "$ROOT/backend" && npx firebase emulators:start \
+  --config ../firebase.json --only firestore --project cartly-dev) \
+  > "$EMULATOR_LOG" 2>&1 &
+EMULATOR_PID=$!
+
+# Poll for readiness rather than sleeping a fixed number of seconds: a cold
+# npm cache or a slower machine makes any fixed sleep a coin flip.
+for _ in $(seq 60); do
+  grep -q 'All emulators ready' "$EMULATOR_LOG" 2>/dev/null && break
+  kill -0 "$EMULATOR_PID" 2>/dev/null || die "the emulator exited. Last lines:
+$(tail -5 "$EMULATOR_LOG")"
+  sleep 1
+done
+grep -q 'All emulators ready' "$EMULATOR_LOG" || die "the emulator did not become ready. See $EMULATOR_LOG"
+step emulator ":8080 ready"
+
+# --- api -------------------------------------------------------------------
+(cd "$ROOT/backend" && npm run start:dev) > "$API_LOG" 2>&1 &
+API_PID=$!
+
+# A 401 is success here: it means the route matched and the x-user-id guard
+# rejected the unauthenticated probe, so the API is genuinely serving.
+for _ in $(seq 60); do
+  [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/items 2>/dev/null)" = "401" ] && break
+  kill -0 "$API_PID" 2>/dev/null || die "the API exited. Last lines:
+$(tail -10 "$API_LOG")"
+  sleep 1
+done
+[ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/items 2>/dev/null)" = "401" ] \
+  || die "the API did not start. See $API_LOG"
+step api ":3000 ready"
+
+# --- app -------------------------------------------------------------------
+printf '  %-10s %s\n' logs "$EMULATOR_LOG, $API_LOG"
+printf '  %-10s %s\n\n' user "$USER_ID"
+printf 'launching Chrome — press q here to stop everything\n\n'
+
+cd "$ROOT/app"
+flutter run -d chrome --dart-define=CARTLY_USER_ID="$USER_ID"
