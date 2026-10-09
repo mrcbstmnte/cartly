@@ -5,7 +5,7 @@ class AddItemSheet extends StatefulWidget {
 
   /// Returns null on success, or a message to display on failure.
   final Future<String?> Function({required String name, required int quantity})
-      onSubmit;
+  onSubmit;
 
   @override
   State<AddItemSheet> createState() => _AddItemSheetState();
@@ -16,6 +16,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
   final _quantityController = TextEditingController(text: '1');
   final _formKey = GlobalKey<FormState>();
   bool _submitting = false;
+  String? _serverError;
 
   @override
   void dispose() {
@@ -27,16 +28,26 @@ class _AddItemSheetState extends State<AddItemSheet> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _submitting = true);
-    final error = await widget.onSubmit(
-      name: _nameController.text.trim(),
-      quantity: int.parse(_quantityController.text),
-    );
+    setState(() {
+      _submitting = true;
+      _serverError = null;
+    });
+    String? error;
+    try {
+      error = await widget.onSubmit(
+        name: _nameController.text.trim(),
+        quantity: int.parse(_quantityController.text),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
     if (!mounted) return;
-    setState(() => _submitting = false);
 
     if (error == null) {
       Navigator.of(context).pop();
+    } else {
+      // The sheet covers the screen's SnackBar, so show the reason here too.
+      setState(() => _serverError = error);
     }
   }
 
@@ -75,6 +86,14 @@ class _AddItemSheetState extends State<AddItemSheet> {
                 return null;
               },
             ),
+            if (_serverError != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _serverError!,
+                key: const Key('server-error'),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,

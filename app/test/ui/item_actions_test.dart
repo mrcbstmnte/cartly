@@ -9,21 +9,21 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/fake_items_repository.dart';
 
 Item _item(String name, {bool bought = false}) => Item(
-      id: name,
-      name: name,
-      quantity: 1,
-      bought: bought,
-      createdAt: DateTime.utc(2026, 1, 1),
-    );
+  id: name,
+  name: name,
+  quantity: 1,
+  bought: bought,
+  createdAt: DateTime.utc(2026, 1, 1),
+);
 
 Widget _app(FakeItemsRepository repository) => ProviderScope(
-      // Mirrors main.dart: without this, Riverpod 3 retries a throwing
-      // build() for ~38s and the error-state test would hang in
-      // pumpAndSettle rather than finding the error view.
-      retry: (_, _) => null,
-      overrides: [itemsRepositoryProvider.overrideWithValue(repository)],
-      child: const MaterialApp(home: ItemsScreen()),
-    );
+  // Mirrors main.dart: without this, Riverpod 3 retries a throwing
+  // build() for ~38s and the error-state test would hang in
+  // pumpAndSettle rather than finding the error view.
+  retry: (_, _) => null,
+  overrides: [itemsRepositoryProvider.overrideWithValue(repository)],
+  child: const MaterialApp(home: ItemsScreen()),
+);
 
 void main() {
   testWidgets('adds an item through the sheet (US-2)', (tester) async {
@@ -45,7 +45,10 @@ void main() {
 
   testWidgets('shows the backend rejection reason (US-2)', (tester) async {
     final repository = FakeItemsRepository(
-      failWith: const ApiException('quantity must be at least 1', statusCode: 400),
+      failWith: const ApiException(
+        'quantity must be at least 1',
+        statusCode: 400,
+      ),
     );
     await tester.pumpWidget(_app(repository));
     await tester.pumpAndSettle();
@@ -66,6 +69,9 @@ void main() {
       ),
       findsOneWidget,
     );
+    // The sheet stays open and shows the reason inline (it covers the SnackBar).
+    expect(find.byKey(const Key('server-error')), findsOneWidget);
+    expect(find.byKey(const Key('name-field')), findsOneWidget);
   });
 
   testWidgets('toggles an item bought (US-3)', (tester) async {
@@ -76,7 +82,11 @@ void main() {
     await tester.tap(find.byType(Checkbox));
     await tester.pumpAndSettle();
 
-    expect(repository.calls, contains('setBought:milk:true'));
+    expect(repository.calls, [
+      'fetchItems',
+      'setBought:milk:true',
+      'fetchItems',
+    ]);
   });
 
   testWidgets('deletes an item (US-4)', (tester) async {
@@ -106,8 +116,9 @@ void main() {
     expect(find.text('bread'), findsOneWidget);
   });
 
-  testWidgets('clearing with nothing bought shows no error (US-5)',
-      (tester) async {
+  testWidgets('clearing with nothing bought shows no error (US-5)', (
+    tester,
+  ) async {
     final repository = FakeItemsRepository(items: [_item('bread')]);
     await tester.pumpWidget(_app(repository));
     await tester.pumpAndSettle();
