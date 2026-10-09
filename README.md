@@ -52,14 +52,25 @@ flutter run -d chrome --dart-define=CARTLY_USER_ID=demo-user
 
 `CARTLY_USER_ID` is the user ID the app sends in the `x-user-id` header. Run it with a different value to see a different, empty list.
 
+### Web and mobile targets
+
+The verified review path is Flutter web in Chrome, as above. The API address defaults to `http://localhost:3000` and can be changed with `--dart-define=CARTLY_API_BASE_URL=...`, next to `CARTLY_USER_ID`:
+
+```bash
+flutter run -d chrome --dart-define=CARTLY_USER_ID=demo-user --dart-define=CARTLY_API_BASE_URL=http://localhost:3000
+```
+
+The Dart code is platform-neutral, but the Android target was not built or run. An Android emulator would need `http://10.0.2.2:3000` instead of `localhost` (there, `localhost` is the emulator itself) and a cleartext-traffic allowance for plain HTTP on API 28+. Neither is configured.
+
 ## Using a real Firebase project
 
-1. Create a Firebase project with Cloud Firestore enabled (native mode).
-2. In `backend/.env`, set `FIREBASE_PROJECT_ID` to your project ID and comment out `FIRESTORE_EMULATOR_HOST`.
-3. In Project settings > Service accounts, generate a private key and save it as `backend/service-account.json`.
-4. In `backend/.env`, set `GOOGLE_APPLICATION_CREDENTIALS=./service-account.json`.
-5. Deploy the composite index that US-1's sort needs. From the repo root: `npx --prefix backend firebase deploy --only firestore:indexes --project <your-project-id>`. Without it, `GET /items` fails on a real project (the emulator does not enforce indexes). The index can take a few minutes to build.
-6. Start the API and the app as above, skipping the emulator.
+1. Log in to Firebase: `npx --prefix backend firebase login`.
+2. Create a Firebase project with Cloud Firestore enabled (native mode).
+3. In `backend/.env`, set `FIREBASE_PROJECT_ID` to your project ID and comment out `FIRESTORE_EMULATOR_HOST`.
+4. In Project settings > Service accounts, generate a private key and save it as `backend/service-account.json`.
+5. In `backend/.env`, set `GOOGLE_APPLICATION_CREDENTIALS=./service-account.json`.
+6. Deploy the composite index that US-1's sort needs. From the repo root: `npx --prefix backend firebase deploy --only firestore:indexes --project <your-project-id>`. Without it, `GET /items` fails on a real project (the emulator does not enforce indexes). The index can take a few minutes to build.
+7. Start the API and the app as above, skipping the emulator.
 
 The service account key is a credential. Never commit it. `.gitignore` already excludes `.env`, `service-account.json` and `*-service-account.json`; keep the key under one of those names.
 
@@ -80,7 +91,7 @@ flutter analyze
 
 ## User story status
 
-Test counts from the last run: backend 39 passing in 7 suites; app 33 passing; `flutter analyze` reports no issues; `flutter build web --release` succeeds. The API was also exercised end-to-end with `curl` against a live emulator for every story below.
+Test counts from the last run: backend 40 passing in 7 suites; app 34 passing; `flutter analyze` reports no issues; `flutter build web --release` succeeds. The API was also exercised end-to-end with `curl` against a live emulator for every story below.
 
 | User story | Status | Notes |
 |---|---|---|
@@ -97,7 +108,7 @@ Every row is backed by automated tests plus a `curl` walkthrough of that story
 against a live API and a live Firestore emulator. The app additionally compiles for
 its real target (`flutter build web --release` succeeds).
 
-One honest gap: the app's **visual** rendering has not been verified by eye in a
+Two honest gaps. First, the emulator path is the verified one: the composite index in `firestore.indexes.json` has not been deployed or queried against a real Firebase project, and the real-project steps above have not been exercised. Second, the app's **visual** rendering has not been verified by eye in a
 browser. Widget tests prove a widget is present in the tree, which is not the same
 as proving a user can see it — and this project already hit that distinction once.
 The add-item sheet is a modal bottom sheet, so it covers the area where a SnackBar
